@@ -25,11 +25,14 @@ int main (int argc, char *argv[]) {
 	int p = -1; 
 	double t = -1; 
 	int e = -1; 
-	// -m (buffer capacity: max num of bytes server can send to client and client sends to server)
+	// -m (buffer capacity: max num of bytes server and client can send to each other
 	int m = MAX_MESSAGE;
+	// if called, user wants to create new private channel 
+	bool c = false;
+	vector<FIFORequestChannel*> channels;
 	
 	string filename = "";
-	while ((opt = getopt(argc, argv, "p:t:e:f:m:")) != -1) {
+	while ((opt = getopt(argc, argv, "p:t:e:f:m:c:")) != -1) {
 		switch (opt) {
 			case 'p':
 				p = atoi (optarg);
@@ -47,6 +50,9 @@ int main (int argc, char *argv[]) {
 			case 'm':
 				// convert optarg into integer
 				m = atoi(optarg);
+				break;
+			case 'c':
+				c = true;
 				break;
 		}
 	}
@@ -70,27 +76,41 @@ int main (int argc, char *argv[]) {
 	// ensure server terminates after client dies by sending QUIT_MSG to server for each open channel
 		// call wait to wait for termination
 
-	// problem: currently request sent for data message is only when pt = 1, time = 0, ecg = 1
-	// solution: let datamsg accept parameters from getopt function
-
-	// problem: when user provides only p statement, get first 1000 data points of ecg1 & ecg2 and save to file named x1.csv
-
-	// problem: when user provides -f filename, transfer entire file in sections (files are too big to send all at once)
-		// (offset: starting pt, length)
-		// account for last transfer where byte size might be different than default MAX_MESSAGE buffer capacity
-
-
-	// problem: when user provides -c, create new private channel of communication between client and server (all requests go thru new pipe)
+	// implementation:
+	char* arg[] = {(char*) "./server", (char*) "-m", (char*) m, nullptr};
+	pid_t pid = fork();
+	// when in child process
+	if(pid == 0){
+		execvp(arg[0], arg);
+	}
 
 	// problem: when user provides quit_msg, ensure no open connections at end or temp files in directory
 		// follow format that client.cpp does for control channel and apply to private channels if created
 
-    FIFORequestChannel chan("control", FIFORequestChannel::CLIENT_SIDE);
+    FIFORequestChannel control_chan("control", FIFORequestChannel::CLIENT_SIDE);
+	channels.push_back(&control_chan); 
+
+	// problem: when user provides -c, create new private channel of communication between client and server (all requests go thru new channel)
+	// implementation:
+	if(c){
+		// send new channel request to server
+		MESSAGE_TYPE nc = NEWCHANNEL_MSG;
+    	control_chan.cwrite(&nc, sizeof(MESSAGE_TYPE));
+		// recieve name from server => var to hold name
+		// cread response from server
+		// call FIFORequestChanell constructor with name from server
+		// push back new channel into vector
+	}
+
+	// used channel is most recently created if exists
+	FIFORequestChannel chan = *(channels.back());
 	
-	// example data point request
 	// single data point retrival 
 	if(p!= -1 && t != -1 && e != -1){
 		char buf[MAX_MESSAGE]; // 256 
+		// problem: currently request sent for data message is only when pt = 1, time = 0, ecg = 1
+		// solution: let datamsg accept parameters from getopt function
+		// implementation: 
 		datamsg x(p, t, e); // adjust from hardcode to user's vals
 		// send to terminal if user requests one point, else send to file
 		
@@ -100,6 +120,9 @@ int main (int argc, char *argv[]) {
 		chan.cread(&reply, sizeof(double)); //answer, response
 		cout << "For person " << p << ", at time " << t << ", the value of ecg " << e << " is " << reply << endl;
 	}
+	// problem: when user provides only p statement, get first 1000 data points of ecg1 & ecg2 and save to file named x1.csv
+	// solution: 
+	// implementation:
 	// 1000 data point retrival
 	else if(p != -1){
 		for(int i =0; i < 1000; ++i){
@@ -127,6 +150,12 @@ int main (int argc, char *argv[]) {
     // sending a non-sense message, you need to change this
 	filemsg fm(0, 0);
 	string fname = filename;
+
+	// problem: when user provides -f filename, transfer entire file in sections (files are too big to send all at once)
+		// (offset: starting pt, length)
+		// account for last transfer where byte size might be different than default MAX_MESSAGE buffer capacity
+	// solution:
+	// implementation:
 	
 	// +1 accounts for null terminator 
 	int len = sizeof(filemsg) + (fname.size() + 1);
@@ -145,15 +174,29 @@ int main (int argc, char *argv[]) {
 		int length = 0;
 		filemsg* file_req = (filemsg*) buf2;
 		file_req->offset = i + length; 
+		// problem: cannot request more bytes than needed or else segmentation in server
+		// solution: length: min(buffer capacity, total file bytes % buffer capacity: remainder)
+		// implementation:
 		file_req->length = min(m, filesize%m);
 		chan.cwrite(buf2, len);
 		chan.cread(&buf3, file_req->length);
 		// write buf3 into file in recieved directory
 
 	}
-	// problem: cannot request more bytes than needed or else segmentation in server
-	// solution: length: min(buffer capacity, total file bytes % buffer capacity: remainder)
 
+	delete[] buf2;
+	delete[] buf3;
+	
+	if(c){
+		// close and delete new chan
+	}
+	
+	// closing the channel    
+    MESSAGE_TYPE m = QUIT_MSG;
+    chan.cwrite(&m, sizeof(MESSAGE_TYPE));
+}
+
+	// notes:
 	// sample command line to check if files types are same:
 		//diff BIMDC/8.csv recieved/8.csv
 
@@ -164,11 +207,3 @@ int main (int argc, char *argv[]) {
 
 	// buff req (size of len) = size(filemsg) + size(filename)
 	// buff res (size of buffer capacity)
-
-	delete[] buf2;
-	delete[] buf3;
-	
-	// closing the channel    
-    MESSAGE_TYPE m = QUIT_MSG;
-    chan.cwrite(&m, sizeof(MESSAGE_TYPE));
-}
