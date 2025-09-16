@@ -34,7 +34,7 @@ enum MESSAGE_TYPE {UNKNOWN_MSG, DATA_MSG, FILE_MSG, NEWCHANNEL_MSG, QUIT_MSG};
 // message requesting a data point
 class datamsg {
 public:
-    MESSAGE_TYPE mtype;
+    MESSAGE_TYPE mtype; // data retrival
     int person; // which patient
     double seconds; // at what time
     int ecgno; // which heart sensor (1 | 2)
@@ -51,7 +51,7 @@ public:
 // message requesting a file
 class filemsg {
 public:
-    MESSAGE_TYPE mtype;
+    MESSAGE_TYPE mtype; // file retrival
     __int64_t offset; // start reading from byte X
     int length; // read this many bytes starting from offset
 	    
