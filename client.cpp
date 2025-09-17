@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <fstream>
+#include <algorithm>
 
 using namespace std;
 
@@ -29,13 +30,13 @@ int main (int argc, char *argv[]) {
 	double t = -1; 
 	int e = -1; 
 	// -m (buffer capacity: max num of bytes server and client can send to each other
-	int m = MAX_MESSAGE;
+	int buffer = MAX_MESSAGE;
 	// if called, user wants to create new private channel 
 	bool c = false;
 	vector<FIFORequestChannel*> channels;
 	
 	string filename = "";
-	while ((opt = getopt(argc, argv, "p:t:e:f:m:c:")) != -1) {
+	while ((opt = getopt(argc, argv, "p:t:e:f:m:c")) != -1) {
 		switch (opt) {
 			case 'p':
 				p = atoi (optarg);
@@ -52,7 +53,7 @@ int main (int argc, char *argv[]) {
 			// arg for server to translate how many bytes are to be transferred 
 			case 'm':
 				// convert optarg into integer
-				m = atoi(optarg);
+				buffer = atoi(optarg);
 				break;
 			case 'c':
 				c = true;
@@ -80,11 +81,12 @@ int main (int argc, char *argv[]) {
 		// call wait to wait for termination
 
 	// implementation:
-	char* arg[] = {(char*) "./server", (char*) "-m", (char*) m, nullptr};
+	std::string buffer_str = std::to_string(buffer);
+	char* args[] = {(char*) "./server",(char*) "-m",(char*) buffer_str.c_str(), nullptr};
 	pid_t pid = fork();
 	// when in child process
 	if(pid == 0){
-		execvp(arg[0], arg);
+		execvp(args[0], args);
 	}
 
 	// problem: when user provides quit_msg, ensure no open connections at end or temp files in directory
@@ -100,10 +102,13 @@ int main (int argc, char *argv[]) {
 		MESSAGE_TYPE nc = NEWCHANNEL_MSG;
     	control_chan.cwrite(&nc, sizeof(MESSAGE_TYPE));
 		// recieve name from server => var to hold name
-		
+		char reply[MAX_MESSAGE];
 		// create response from server
+		control_chan.cread(reply, sizeof(reply));
 		// call FIFORequestChanell constructor with name from server
-		// push back new channel into vector
+		FIFORequestChannel* new_chan = new FIFORequestChannel(reply, FIFORequestChannel::CLIENT_SIDE);
+		// push back new channel into vector, channels is a vector pointer => provide address for it to point to
+		channels.push_back(new_chan);
 	}
 
 	// used channel is most recently created if exists
@@ -139,13 +144,13 @@ int main (int argc, char *argv[]) {
 	// implementation:
 	// 1000 data point retrival
 	else if(p != -1 && t == -1 && e == -1){
-		std::ofstream outfile("/recieved/x1.csv");
+		std::ofstream outfile("received/x1.csv");
 		for(int i =0; i < 1000; ++i){
 			char buf[MAX_MESSAGE]; 
 			// time moves in .004 increments
-			t=i*.004;
+			double curr_t=i*.004;
 			for(int j =1; j < 3; ++j){
-				datamsg x(p, t, j); 
+				datamsg x(p, curr_t, j); 
 				memcpy(buf, &x, sizeof(datamsg));
 				chan.cwrite(buf, sizeof(datamsg)); 
 				double reply;
@@ -166,10 +171,22 @@ int main (int argc, char *argv[]) {
 		filemsg fm(0, 0);
 		string fname = filename;
 
+		std::ofstream outfile("received/" + fname, std::ios::binary);
+
 		// problem: when user provides -f filename, transfer entire file into recieved directory (send in sections as files are too big to send all at once)
 			// (offset: starting pt, length)
 			// account for last transfer where byte size might be different than default buffer capacity
 		// solution:
+			// 1. send request to server to recieve total byte size of file
+			// allocate space for request: (request takes up filemsg struct + filename + 1 <- store into len)
+			// copy bytes from filemsg address into allocated space with size of struct
+			// copy bytes from filename address into allocated space with size of filesize + 1
+			// write bytes in allocated space to server with size of len
+			// allocate space for response and store read val as total byte size of file
+			// 2. send files in sections, user inputs num of bytes to be sent per section (buffer capacity: m)
+			// (filesize / m) + 1 = num of sections
+			// for(sections)
+				// 
 		// implementation:
 		
 		// +1 accounts for null terminator 
@@ -182,38 +199,42 @@ int main (int argc, char *argv[]) {
 		int64_t filesize = 0; // stores how many bytes are in the file
 		chan.cread(&filesize, sizeof(int64_t));
 
-		// size of max server response
-		char* buf3 = new char[m];
-
-		for(int i =0; i <= filesize/m; ++i){
-			int length = 0;
-			filemsg* file_req = (filemsg*) buf3;
-			file_req->offset = i + length; 
+		// size of max server response (buffer?)
+		char* buf3 = new char[MAX_MESSAGE];
+ 
+		for(int i =0; i <= filesize/buffer; ++i){
+			filemsg* file_req = (filemsg*) buf2;
+			(*file_req).offset = buffer*i; // starting point
 			// problem: cannot request more bytes than needed or else segmentation in server
 			// solution: length: min(buffer capacity, total file bytes % buffer capacity: remainder)
 			// implementation:
-			file_req->length = min(m, filesize%m);
+			(*file_req).length = std::min<int64_t>(buffer, filesize - (*file_req).offset); // step size
 			chan.cwrite(buf2, len);
-			chan.cread(&buf3, file_req->length);
+			chan.cread(buf3, (*file_req).length);
 			// write buf3 into file in recieved directory
+			outfile.write(buf3, (*file_req).length);
+		}
 
+		delete[] buf2;
+		delete[] buf3;
+	}
+
+	/*else{
+		// unknown message
+		MESSAGE_TYPE m = UNKNOWN_MSG;
+		chan.cwrite(&m, sizof(MESSAGE_TYPE));
+	}*/
+
+	
+	
+	for(auto curr : channels){
+		MESSAGE_TYPE m = QUIT_MSG;
+    	(*curr).cwrite(&m, sizeof(MESSAGE_TYPE));
+		if(curr != &control_chan){
+			delete curr;
 		}
 	}
-
-	else{
-		// unknown message
-	}
-
-	delete[] buf2;
-	delete[] buf3;
-	
-	if(c){
-		// close and delete new chan
-	}
-	
-	// closing the channel    
-    MESSAGE_TYPE m = QUIT_MSG;
-    chan.cwrite(&m, sizeof(MESSAGE_TYPE));
+	channels.clear();
 
 	// parent cleans up after child
 	int status;
