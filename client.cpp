@@ -156,8 +156,11 @@ int main (int argc, char *argv[]) {
 				double reply;
 				chan.cread(&reply, sizeof(double)); 
 				if(j == 1){
-					outfile << reply << ", ";
+					outfile << curr_t << "," << reply << ",";
 				}
+				/*else if(i != 999){
+					outfile << reply << endl;
+				}*/
 				else{
 					outfile << reply << endl;
 				}
@@ -200,7 +203,7 @@ int main (int argc, char *argv[]) {
 		chan.cread(&filesize, sizeof(int64_t));
 
 		// size of max server response (buffer?)
-		char* buf3 = new char[MAX_MESSAGE];
+		char* buf3 = new char[buffer];
  
 		for(int i =0; i <= filesize/buffer; ++i){
 			filemsg* file_req = (filemsg*) buf2;
@@ -219,21 +222,22 @@ int main (int argc, char *argv[]) {
 		delete[] buf3;
 	}
 
-	/*else{
+	else{
 		// unknown message
 		MESSAGE_TYPE m = UNKNOWN_MSG;
-		chan.cwrite(&m, sizof(MESSAGE_TYPE));
-	}*/
+		chan.cwrite(&m, sizeof(MESSAGE_TYPE));
+	}
 
 	
-	
-	for(auto curr : channels){
-		MESSAGE_TYPE m = QUIT_MSG;
-    	(*curr).cwrite(&m, sizeof(MESSAGE_TYPE));
-		if(curr != &control_chan){
-			delete curr;
+	//if(c){
+		for(auto curr : channels){
+			MESSAGE_TYPE m = QUIT_MSG;
+			(*curr).cwrite(&m, sizeof(MESSAGE_TYPE));
+			if(curr != &control_chan){
+				delete curr;
+			}
 		}
-	}
+	//}
 	channels.clear();
 
 	// parent cleans up after child
@@ -243,7 +247,7 @@ int main (int argc, char *argv[]) {
 
 	// notes:
 	// sample command line to check if files types are same:
-		//diff BIMDC/8.csv recieved/8.csv
+		//diff BIMDC/8.csv received/8.csv
 
 	// file request = file msg + filename
 		// part 1 (file msg): type, offset, length
