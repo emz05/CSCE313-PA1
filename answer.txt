@@ -1,72 +1,22 @@
-# Create files of different sizes in the BIMDC directory
-truncate -s 1M BIMDC/test1M.bin     # 1 MB file
-truncate -s 10M BIMDC/test10M.bin   # 10 MB file  
-truncate -s 100M BIMDC/test100M.bin # 100 MB file
-truncate -s 1G BIMDC/test1G.bin     # 1 GB file (if you want to test large files)
+Problem: Tabulate time taken to transfer files of diff sizes
+Response: 
+File size (MB)| Buffer size (-m) | Real Time (s) | User Time (s) | Sys Time (s)
+1             | default          | 0m10.325s     | 0m0.090s      | 0m0.348s
+10            | default          | 2m5.977s      | 0m0.243s      | 0m1.938s
+100           | default          | 20m49.428s    | 0m3.125s      | 0m28.305s
+10            | 256              | 1m26.751s     | 0m0.240s      | 0m2.260s
+10            | 1024             | 5m44.780s     | 0m0.916s      | 0m9.551s
+10            | 4096             | 20m52.332s    | 0m3.143s      | 0m29.505s
 
-# Example timing commands
-time ./client -f test1M.bin
-time ./client -f test10M.bin  
-time ./client -f test100M.bin
 
-time ./client -m 256 -f test10M.bin    # Default buffer
-time ./client -m 1024 -f test10M.bin   # Larger buffer
-time ./client -m 4096 -f test10M.bin   # Even larger buffer
+Problem: What is the main bottleneck?
+Response: The speed file transfers occur at slow down greatly due to the communication necessary between processes through pipes.
+This occurs during every read and write. With smaller buffers, larges files are sectioned out into smaller pieces. 
+This increases the number of necessary transfers, increasing the amount of work done.
+By increasing the buffer size, this bottleneck can be relieved a little more as the number of transfers are reduced. 
 
-bash-5.1$ ./pa1-tests.sh 
-To remove colour from tests, set COLOUR to 1 in sh file
 
-rm -f server client fifo* data*_* *.tst *.o *.csv received/*
-g++ -std=c++17 -g -pedantic -Wall -Wextra -Werror -fno-omit-frame-pointer -c -o common.o common.cpp
-g++ -std=c++17 -g -pedantic -Wall -Wextra -Werror -fno-omit-frame-pointer -c -o FIFORequestChannel.o FIFORequestChannel.cpp
-g++ -std=c++17 -g -pedantic -Wall -Wextra -Werror -fno-omit-frame-pointer -o server server.cpp common.o FIFORequestChannel.o 
-g++ -std=c++17 -g -pedantic -Wall -Wextra -Werror -fno-omit-frame-pointer -o client client.cpp common.o FIFORequestChannel.o 
-rm common.o FIFORequestChannel.o
-
-Start testing
-Client-side is done and exited
-Server terminated
-  Passed
-
-SCORE: 15/85
-
- Passed
-
-SCORE: 20/85
-
-Client-side is done and exited
-Server terminated
-  Passed
-
-SCORE: 30/85
-
-10+0 records in
-10+0 records out
-10485760 bytes (10 MB, 10 MiB) copied, 0.102934 s, 102 MB/s
-Client-side is done and exited
-Server terminated
-  Passed
-Client-side is done and exited
-Server terminated
-  Passed
-Client-side is done and exited
-Server terminated
-  Passed
-Client-side is done and exitedClient-side is done and exited
-
-Server terminated
-  Passed
-
-SCORE: 80/85
-
-  Passed
-
-SCORE: 85/85
-
-bash-5.1$ truncate -s 1M BIMDC/test1M.bin
-bash-5.1$ truncate -s 10M BIMDC/test10M.bin
-bash-5.1$ truncate -s 100M BIMDC/test100M.bin
-bash-5.1$ truncate -s 1G BIMDC/test1G.bin
+Terminal log:
 bash-5.1$ time ./client -f test1M.bin
 Client-side is done and exited
 Server terminated
@@ -88,27 +38,6 @@ Server terminated
 real    20m49.428s
 user    0m3.125s
 sys     0m28.305s
-bash-5.1$ time ./client -m 256 -f test10M.bin
-Client-side is done and exited
-Server terminated
-
-real    1m59.411s
-user    0m0.208s
-sys     0m1.526s
-bash-5.1$ time ./client -m 1024 -f test10M.bin
-Client-side is done and exited
-Server terminated
-
-real    0m26.655s
-user    0m0.080s
-sys     0m0.438s
-bash-5.1$ time ./client -m 4096 -f test10M.bin
-Client-side is done and exited
-Server terminated
-
-real    0m7.368s
-user    0m0.060s
-sys     0m0.151s
 
 bash-5.1$ time ./client -m 4096 -f test100M.bin
 Client-side is done and exited
@@ -131,20 +60,4 @@ Server terminated
 real    20m52.332s
 user    0m3.143s
 sys     0m29.505s
-bash-5.1$ 
 
-Problem: Tabulate time taken to transfer files of diff sizes
-Response: 
-File size (MB)| Buffer size (-m) | Real Time (s) | User Time (s) | Sys Time (s)
-1             | default          | 0m10.325s     | 0m0.090s      | 0m0.348s
-10            | default          | 2m5.977s      | 0m0.243s      | 0m1.938s
-100           | default          | 20m49.428s    | 0m3.125s      | 0m28.305s
-10            | 256              | 1m26.751s     | 0m0.240s      | 0m2.260s
-10            | 1024             | 5m44.780s     | 0m0.916s      | 0m9.551s
-10            | 4096             | 20m52.332s    | 0m3.143s      | 0m29.505s
-
-Problem: What is the main bottleneck?
-Response: The speed file transfers occur at slow down greatly due to the communication necessary between processes through pipes.
-This occurs during every read and write. With smaller buffers, larges files are sectioned out into smaller pieces. 
-This increases the number of necessary transfers, increasing the amount of work done.
-By increasing the buffer size, this bottleneck can be relieved a little more as the number of transfers are reduced. 
